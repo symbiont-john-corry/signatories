@@ -28,19 +28,19 @@ def contract() -> None:
 @clientside
 def contract_create(text: str) -> Contract:
     cvm.job_start()
-    contract = _contract_create(text, cvm.tx.key_alias)
+    contract = _contract_create(str(text))
     if isinstance(contract, None):
         cvm.error("Error creating Contract")
     return contract
 
 @executable
-def _contract_create(text: str, creator: KeyAlias) -> Optional[Contract]:
+def _contract_create(text: str) -> Optional[Contract]:
     channel : ChannelName = cvm.tx.write_channel
     id : Identifier = cvm.generate_id(CONTRACT_PREFIX)
     contract = cvm.storage.get(channel, ContractStatic, id)
     if isinstance(contract, None):
         # Write the Contract to private persistent store
-        contract = Contract(id = id, text = text, creator = creator)
+        contract = Contract(id = id, text = text, creator = cvm.tx.key_alias)
         cvm.storage.put(channel, id, contract)
         # Write to the public ContractChannel map
         contract_channel = ContractChannel(contract_id = id, channel = channel)
