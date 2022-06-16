@@ -8,11 +8,10 @@ Signatures are stored by signers. A Signature is created by a KA and bears a con
 ## API
 ### create_contract
 Creates a contract that can be signed by signatory parties.
-A contract contains data and a list of 
+A contract contains data and a list of parties (identified by their KA).
 
-### add_signer
-Adds a signer, by key alias, to a contract. This operation merely appends a KA to the list of
-signers/parties to the contract.
+When all of the parties have created signatures for the contract, the contract can be considered to be effective/active/binding.
+
 
 ### sign
 Allows a signer, by key alias, to sign a contract identified by contract ID.
