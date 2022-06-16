@@ -1,29 +1,60 @@
-schema Contract:
-    id: str
-    text: str
-    creator: KeyAlias
-    channel_id: ChannelName
-    parties: List[KeyAlias]
-    signatures: List[Signature]
+# Signature is applied to a Contract by one of the Contract's parties
 
 schema Signature:
-    id: str
-    contract_id: str
+    id: Identifier
+    contract_id: Identifier
     party: KeyAlias
     created_at: DateTime
+# Contract is an agreement that can be entered into by parties.
+
+schema Contract:
+    id: Identifier
+    text: str
+    creator: KeyAlias
+    parties: List[KeyAlias]
+    signatures: List[Signature]
+# ContractChannel is stored on PUBLIC and is where ChannelName where a Contract is
+# stored are looked up
+
+schema ContractChannel:
+    contract_id: Identifier
+    channel: ChannelName
+CONTRACT_PREFIX : str = "CONTRACT"
 
 @clientside
-def contract() -> Contract:
-    return Contract
+def contract() -> None:
+    return None
 
 @clientside
-def contract_create() -> Contract:
-    return Contract
+def contract_create(text: str) -> Contract:
+    cvm.job_start()
+    contract = _contract_create(text, cvm.tx.key_alias)
+    if isinstance(contract, None):
+        cvm.error("Error creating Contract")
+    return contract
+
+@executable
+def _contract_create(text: str, creator: KeyAlias) -> Optional[Contract]:
+    channel : ChannelName = cvm.tx.write_channel
+    id : Identifier = cvm.generate_id(CONTRACT_PREFIX)
+    contract = cvm.storage.get(channel, ContractStatic, id)
+    if isinstance(contract, None):
+        # Write the Contract to private persistent store
+        contract = Contract(id = id, text = text, creator = creator)
+        cvm.storage.put(channel, id, contract)
+        # Write to the public ContractChannel map
+        contract_channel = ContractChannel(contract_id = id, channel = channel)
+        cvm.storage.put(PUBLIC, ContractChannelStatic, contract_channel)
+        cvm.job_complete(std.json(contract))
+        return contract
+    else:
+        cvm.error(f"Contract already exists, ID: {id}")
+    return None
 
 @clientside
 def contract_add_party() -> None:
     return None
 
 @clientside
-def contract_sign() -> Signature:
-    return Signature
+def contract_sign() -> None:
+    return None
