@@ -1,0 +1,29 @@
+schema Contract:
+    id: str
+    text: str
+    creator: KeyAlias
+    channel_id: ChannelName
+    parties: List[KeyAlias]
+    signatures: List[Signature]
+
+schema Signature:
+    id: str
+    contract_id: str
+    party: KeyAlias
+    created_at: DateTime
+
+@clientside
+def contract() -> Contract:
+    return Contract
+
+@clientside
+def contract_create() -> Contract:
+    return Contract
+
+@clientside
+def contract_add_party() -> None:
+    return None
+
+@clientside
+def contract_sign() -> Signature:
+    return Signature
