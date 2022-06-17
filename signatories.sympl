@@ -47,8 +47,9 @@ def _contract_create(text: str) -> None:
                                , signatures = None)
         cvm.storage.put(id, new_contract)
         # Write to the public ContractChannel map
+        id = cvm.generate_id(CONTRACT_PREFIX)
         contract_channel = ContractChannel(contract_id = id, channel = channel)
-        cvm.storage.put(PUBLIC, contract_channel)
+        cvm.storage.put(id, contract_channel)
         cvm.job_complete(std.json(new_contract))
     else:
         cvm.error(f"Contract already exists, ID: {id}")
