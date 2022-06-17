@@ -8,7 +8,7 @@ schema Signature:
 # Contract is an agreement that can be entered into by parties.
 
 schema Contract:
-    id: str
+    id: Identifier
     text: str
     creator: str
     parties: Optional[List[KeyAlias]]
@@ -29,30 +29,30 @@ def contract() -> None:
 def contract_create(text: str) -> None:
     cvm.job_start()
     ch : ChannelName = cvm.new_channel(CONTRACT_PREFIX)
+    contract_id = cvm.generate_id(CONTRACT_PREFIX)
+    creator : str = cvm.tx.key_alias
+    # Write the Contract to private persistent store
+    contract = Contract(id = contract_id
+                       , text = text
+                       , creator = creator
+                       , parties = None
+                       , signatures = None)
     with PostTxArgs(ch):
-        _contract_create(text)
+        _contract_create(contract)
+    with PostTxArgs(PUBLIC):
+        _contract_channel_map(contract_id, ch)
 
 @executable
-def _contract_create(text: str) -> None:
+def _contract_create(contract: Contract) -> None:
     channel : ChannelName = cvm.tx.write_channel
+    cvm.storage.put(contract.id, contract)
+
+@executable
+def _contract_channel_map(contract_id: Identifier, ch: ChannelName) -> None:
+    # Write to the public ContractChannel map
     id = cvm.generate_id(CONTRACT_PREFIX)
-    creator : str = cvm.tx.key_alias
-    contract = cvm.storage.get(channel, ContractStatic, id)
-    if isinstance(contract, None):
-        # Write the Contract to private persistent store
-        new_contract = Contract(id = id
-                               , text = text
-                               , creator = creator
-                               , parties = None
-                               , signatures = None)
-        cvm.storage.put(id, new_contract)
-        # Write to the public ContractChannel map
-        id = cvm.generate_id(CONTRACT_PREFIX)
-        contract_channel = ContractChannel(contract_id = id, channel = channel)
-        cvm.storage.put(id, contract_channel)
-        cvm.job_complete(std.json(new_contract))
-    else:
-        cvm.error(f"Contract already exists, ID: {id}")
+    contract_channel = ContractChannel(contract_id = contract_id, channel = ch)
+    cvm.storage.put(id, contract_channel)
 
 @clientside
 def contract_add_party() -> None:
