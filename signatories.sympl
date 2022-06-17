@@ -1,29 +1,63 @@
-schema Contract:
-    id: str
-    text: str
-    creator: KeyAlias
-    channel_id: ChannelName
-    parties: List[KeyAlias]
-    signatures: List[Signature]
+# Signature is applied to a Contract by one of the Contract's parties
 
 schema Signature:
-    id: str
-    contract_id: str
+    id: Identifier
+    contract_id: Identifier
     party: KeyAlias
     created_at: DateTime
+# Contract is an agreement that can be entered into by parties.
+
+schema Contract:
+    id: Identifier
+    text: str
+    creator: str
+    parties: Optional[List[KeyAlias]]
+    signatures: Optional[List[Signature]]
+# ContractChannel is stored on PUBLIC and is where ChannelName where a Contract is
+# stored are looked up
+
+schema ContractChannel:
+    contract_id: Identifier
+    channel: ChannelName
+CONTRACT_PREFIX : str = "CONTRACT"
 
 @clientside
-def contract() -> Contract:
-    return Contract
+def contract() -> None:
+    return None
 
 @clientside
-def contract_create() -> Contract:
-    return Contract
+def contract_create(text: str) -> None:
+    cvm.job_start()
+    ch : ChannelName = cvm.new_channel(CONTRACT_PREFIX)
+    contract_id = cvm.generate_id(CONTRACT_PREFIX)
+    creator : str = cvm.tx.key_alias
+    # Write the Contract to private persistent store
+    contract = Contract(id = contract_id
+                       , text = text
+                       , creator = creator
+                       , parties = None
+                       , signatures = None)
+    with PostTxArgs(ch):
+        _contract_create(contract)
+    with PostTxArgs(PUBLIC):
+        _contract_channel_map(contract_id, ch)
+
+@executable
+def _contract_create(contract: Contract) -> None:
+    channel : ChannelName = cvm.tx.write_channel
+    cvm.storage.put(contract.id, contract)
+
+@executable
+def _contract_channel_map(contract_id: Identifier, ch: ChannelName) -> None:
+    # Write to the public ContractChannel map
+    id = cvm.generate_id(CONTRACT_PREFIX)
+    contract_channel = ContractChannel(contract_id = contract_id, channel = ch)
+    cvm.storage.put(id, contract_channel)
 
 @clientside
 def contract_add_party() -> None:
     return None
 
 @clientside
-def contract_sign() -> Signature:
-    return Signature
+def contract_sign() -> None:
+    return None
