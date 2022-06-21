@@ -63,6 +63,8 @@ def _contract_channel_map(contract_id: Identifier, ch: ChannelName) -> None:
 def _get_contract(contract_id: Identifier) -> None:
     channels = cvm.storage.query(ContractChannelStatic).where("contract_id"
                                                              , contract_id).values()
+    if isinstance(channels, None):
+        cvm.error("error retrieving channels from query")
     ch = channels[0]
     if isinstance(ch, None):
         cvm.error(f"unable to retrieve channel for contract ID: {contract_id}")
