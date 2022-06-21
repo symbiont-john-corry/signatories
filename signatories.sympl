@@ -24,7 +24,8 @@ def contract(channel: ChannelName) -> None:
         _get_contract(channel)
 
 @clientside
-def contract_create(text: str) -> Contract:
+def contract_create(text: str) -> None:
+    cvm.job_start()
     ch : ChannelName = cvm.new_channel(CONTRACT_PREFIX)
     creator : str = cvm.tx.key_alias
     # Write the Contract to private persistent store
@@ -35,11 +36,11 @@ def contract_create(text: str) -> Contract:
                        , signatures = None)
     with PostTxArgs(ch):
         _contract_create(contract)
-    return contract
 
 @executable
 def _contract_create(contract: Contract) -> None:
     cvm.storage.put(contract.channel, contract)
+    cvm.job_complete(std.json(contract))
 
 @executable
 def _get_contract(channel: ChannelName) -> None:
