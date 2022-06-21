@@ -8,69 +8,44 @@ schema Signature:
 # Contract is an agreement that can be entered into by parties.
 
 schema Contract:
-    id: Identifier
+    channel: ChannelName
     text: str
     creator: str
     parties: Optional[List[KeyAlias]]
     signatures: Optional[List[Signature]]
-# ContractChannel is stored on PUBLIC and is where ChannelName where a Contract is
-# stored are looked up
-
-schema ContractChannel:
-    contract_id: Identifier
-    channel: ChannelName
-CONTRACT_PREFIX : str = "CONTRACT"
+CONTRACT_PREFIX : str = "CON"
 
 @clientside
-def contract(contract_id: str) -> None:
+def contract(channel: ChannelName) -> None:
     cvm.job_start()
-    id : Identifier = Identifier(contract_id)
     # get the contract channel name from the public ContractChannel store
     # look up the contract itself
     with PostTxArgs(PUBLIC):
-        _get_contract(id)
+        _get_contract(channel)
 
 @clientside
-def contract_create(text: str) -> None:
-    cvm.job_start()
+def contract_create(text: str) -> Contract:
     ch : ChannelName = cvm.new_channel(CONTRACT_PREFIX)
-    contract_id = cvm.generate_id(CONTRACT_PREFIX)
     creator : str = cvm.tx.key_alias
     # Write the Contract to private persistent store
-    contract = Contract(id = contract_id
+    contract = Contract(channel = ch
                        , text = text
                        , creator = creator
                        , parties = None
                        , signatures = None)
     with PostTxArgs(ch):
         _contract_create(contract)
-    with PostTxArgs(PUBLIC):
-        _contract_channel_map(contract_id, ch)
+    return contract
 
 @executable
 def _contract_create(contract: Contract) -> None:
-    channel : ChannelName = cvm.tx.write_channel
-    cvm.storage.put(contract.id, contract)
+    cvm.storage.put(contract.channel, contract)
 
 @executable
-def _contract_channel_map(contract_id: Identifier, ch: ChannelName) -> None:
-    # Write to the public ContractChannel map
-    id = cvm.generate_id(CONTRACT_PREFIX)
-    contract_channel = ContractChannel(contract_id = contract_id, channel = ch)
-    cvm.storage.put(id, contract_channel)
-
-@executable
-def _get_contract(contract_id: Identifier) -> None:
-    channels = cvm.storage.query(ContractChannelStatic).where("contract_id"
-                                                             , contract_id).values()
-    if isinstance(channels, None):
-        cvm.error("error retrieving channels from query")
-    ch = channels[0]
-    if isinstance(ch, None):
-        cvm.error(f"unable to retrieve channel for contract ID: {contract_id}")
-    contract = cvm.storage.get(ch.channel, ContractStatic, contract_id)
+def _get_contract(channel: ChannelName) -> None:
+    contract = cvm.storage.get(channel, ContractStatic, Identifier(channel))
     if isinstance(contract, None):
-        cvm.error(f"unable to retrieve contract {contract_id} on channel {ch.channel}")
+        cvm.error(f"unable to retrieve contract on channel {channel}")
     cvm.job_complete(std.json(contract))
 
 @clientside
