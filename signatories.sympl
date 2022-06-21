@@ -22,8 +22,13 @@ schema ContractChannel:
 CONTRACT_PREFIX : str = "CONTRACT"
 
 @clientside
-def contract() -> None:
-    return None
+def contract(contract_id: str) -> None:
+    cvm.job_start()
+    id : Identifier = Identifier(contract_id)
+    # get the contract channel name from the public ContractChannel store
+    # look up the contract itself
+    with PostTxArgs(PUBLIC):
+        _get_contract(id)
 
 @clientside
 def contract_create(text: str) -> None:
@@ -53,6 +58,17 @@ def _contract_channel_map(contract_id: Identifier, ch: ChannelName) -> None:
     id = cvm.generate_id(CONTRACT_PREFIX)
     contract_channel = ContractChannel(contract_id = contract_id, channel = ch)
     cvm.storage.put(id, contract_channel)
+
+@executable
+def _get_contract(contract_id: Identifier) -> None:
+    ch = cvm.storage.query(ContractChannelStatic).where("contract_id"
+                                                       , contract_id)
+    if isinstance(ch, None):
+        cvm.error(f"unable to retrieve channel for contract ID: {contract_id}")
+    contract = cvm.storage.get(ch.channel, ContractStatic, contract_id)
+    if isinstance(contract, None):
+        cvm.error(f"unable to retrieve contract {contract_id} on channel {ch.channel}")
+    cvm.job_complete(std.json(contract))
 
 @clientside
 def contract_add_party() -> None:
