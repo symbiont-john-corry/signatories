@@ -2,6 +2,8 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -9,12 +11,43 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cenkalti/backoff/v4"
 	"github.com/stretchr/testify/require"
 )
 
 var CREATOR string
 var SIGNER string
-var contractID string
+var jobID string
+var jobCompleteEvent Event
+
+type Event struct {
+	Index   int
+	Channel string
+	Type    string
+	Data    Contract
+	JobID   string `json:"job_id"`
+}
+type EventResponse struct {
+	Data struct {
+		FirstIndex int     `json:"first_index"`
+		LastIndex  int     `json:"last_index"`
+		MaxIndex   int     `json:"max_index"`
+		Events     []Event `json:"events"`
+	}
+}
+type Contract struct {
+	Result struct {
+		Text    string
+		Creator string
+		Channel string
+	}
+}
+
+type JobResponse struct {
+	Data struct {
+		JobID string `json:"job_id"`
+	} `json:"data"`
+}
 
 func Test_Contract(t *testing.T) {
 
@@ -94,14 +127,96 @@ func Test_Contract(t *testing.T) {
 		t.Log("Response")
 		b, err := io.ReadAll(res.Body)
 		require.NoError(t, err)
-		t.Logf(string(b))
+
+		var data JobResponse
+
+		err = json.Unmarshal(b, &data)
+		require.NoError(t, err)
+		jobID = data.Data.JobID
+		t.Logf("Job ID: %s", jobID)
+	})
+
+	var contractChannel string
+
+	t.Run("wait for contract data", func(t *testing.T) {
+		o := func() error {
+			err := getContractEventIndex(jobID)
+			if err != nil {
+				t.Logf("error getting event: %v", err)
+			}
+			return err
+		}
+		err := backoff.Retry(o, backoff.NewExponentialBackOff())
+		require.NoError(t, err)
+
+		t.Logf("Job Complete Event: %+v", jobCompleteEvent)
+		contractChannel = jobCompleteEvent.Data.Result.Channel
 	})
 
 	t.Run("get contract", func(t *testing.T) {
-		_, _ = http.NewRequest(
+		req, err := http.NewRequest(
 			http.MethodPost,
 			"http://localhost:8888/api/v1/contracts/signatories/10-1.0.0/contract",
-			bytes.NewBuffer([]byte("foo")),
+			bytes.NewBuffer([]byte(fmt.Sprintf(`{"channel":"%s"}`, contractChannel))),
 		)
+		req.Header.Add("Content-Type", "application/json")
+		req.Header.Add("Symbiont-Key-Alias", CREATOR)
+		require.NoError(t, err)
+		c := http.Client{}
+
+		res, err := c.Do(req)
+		require.NoError(t, err)
+
+		b, err := io.ReadAll(res.Body)
+		require.NoError(t, err)
+
+		t.Logf("Response: %s", string(b))
+
 	})
+}
+
+func getContractEventIndex(jid string) error {
+	eventURL := "http://localhost:8888/api/v1/events/foo"
+
+	req, err := http.NewRequest(
+		http.MethodGet,
+		eventURL,
+		nil,
+	)
+	if err != nil {
+		return err
+	}
+	req.Header.Add("Content-Type", "application/json")
+	req.Header.Add("Symbiont-Key-Alias", CREATOR)
+	c := http.Client{}
+
+	res, err := c.Do(req)
+	if err != nil {
+		return err
+	}
+	b, err := io.ReadAll(res.Body)
+	if err != nil {
+		return err
+	}
+
+	if res.StatusCode != http.StatusOK {
+		return fmt.Errorf("non-200 status: %d; %s", res.StatusCode, string(b))
+	}
+
+	var er EventResponse
+	err = json.Unmarshal(b, &er)
+	if err != nil {
+		return err
+	}
+
+	for _, e := range er.Data.Events {
+		if e.JobID == jid {
+			if e.Type == `assembly/job_complete` {
+				jobCompleteEvent = e
+				return nil
+			}
+		}
+	}
+
+	return fmt.Errorf("no completed job found")
 }

@@ -2,7 +2,10 @@ module github.com/symbiont-john-corry/signatories
 
 go 1.18
 
-require github.com/stretchr/testify v1.7.4
+require (
+	github.com/cenkalti/backoff/v4 v4.1.3
+	github.com/stretchr/testify v1.7.4
+)
 
 require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
