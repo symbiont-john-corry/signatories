@@ -16,12 +16,11 @@ schema Contract:
 CONTRACT_PREFIX : str = "CON"
 
 @clientside
-def contract(channel: ChannelName) -> None:
-    cvm.job_start()
-    # get the contract channel name from the public ContractChannel store
-    # look up the contract itself
-    with PostTxArgs(PUBLIC):
-        _get_contract(channel)
+def contract(channel: ChannelName) -> Contract:
+    contract = cvm.storage.get(channel, ContractStatic, Identifier(channel))
+    if isinstance(contract, None):
+        cvm.error(f"unable to retrieve contract on channel {channel}")
+    return contract
 
 @clientside
 def contract_create(text: str) -> None:
