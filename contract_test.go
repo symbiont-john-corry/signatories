@@ -24,7 +24,7 @@ type Event struct {
 	Index   int
 	Channel string
 	Type    string
-	Data    Contract
+	Data    ResultData
 	JobID   string `json:"job_id"`
 }
 type EventResponse struct {
@@ -35,12 +35,27 @@ type EventResponse struct {
 		Events     []Event `json:"events"`
 	}
 }
-type Contract struct {
-	Result struct {
-		Text    string
-		Creator string
-		Channel string
+type ResultData struct {
+	Result map[string]interface{}
+}
+
+func (d ResultData) ToContract(c *Contract) error {
+	m, err := json.Marshal(d.Result)
+	if err != nil {
+		return err
 	}
+
+	err = json.Unmarshal(m, c)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+type Contract struct {
+	Text    string
+	Creator string
+	Channel string
 }
 
 type JobResponse struct {
@@ -150,8 +165,14 @@ func Test_Contract(t *testing.T) {
 		require.NoError(t, err)
 
 		t.Logf("Job Complete Event: %+v", jobCompleteEvent)
-		contractChannel = jobCompleteEvent.Data.Result.Channel
+
+		var c Contract
+		err = jobCompleteEvent.Data.ToContract(&c)
+		require.NoError(t, err)
+		contractChannel = string(c.Channel)
 	})
+
+	var contract Contract
 
 	t.Run("get contract", func(t *testing.T) {
 		req, err := http.NewRequest(
@@ -170,7 +191,27 @@ func Test_Contract(t *testing.T) {
 		b, err := io.ReadAll(res.Body)
 		require.NoError(t, err)
 
-		t.Logf("Response: %s", string(b))
+		var e Event
+		err = json.Unmarshal(b, &e)
+		require.NoError(t, err)
+
+		err = e.Data.ToContract(&contract)
+		require.NoError(t, err)
+	})
+
+	t.Run("sign contract - creator", func(t *testing.T) {
+
+	})
+
+	t.Run("sign contract - other party", func(t *testing.T) {
+
+	})
+
+	t.Run("add party to contract", func(t *testing.T) {
+
+	})
+
+	t.Run("sign contract - other party", func(t *testing.T) {
 
 	})
 }
