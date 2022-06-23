@@ -1,9 +1,9 @@
 # Signature is applied to a Contract by one of the Contract's parties
 
 schema Signature:
-    contract_id: Identifier
+    contract_channel: ChannelName
     party: KeyAlias
-    created_at: DateTime
+    created_at: Timestamp
 # Contract is an agreement that can be entered into by parties.
 
 schema Contract:
@@ -35,40 +35,53 @@ def contract_create(text: str) -> None:
                        , parties = parties
                        , signatures = signatures)
     with PostTxArgs(ch):
-        _contract_create(contract)
+        _contract_save(contract)
 
 @executable
-def _contract_create(contract: Contract) -> Contract:
+def _contract_save(contract: Contract) -> None:
     cvm.storage.put(contract.channel, contract)
     cvm.job_complete(std.json(contract))
-    return contract
 
 @clientside
 def contract_add_party(channel: ChannelName, ka: KeyAlias) -> None:
     contract = cvm.storage.get(channel, ContractStatic, Identifier(channel))
+    parties : List[KeyAlias] = []
     if isinstance(contract, None):
         cvm.error(f"unable to retrieve contract on channel {channel}")
-    key_alias = cvm.KeyAlias(ka)
-    if isinstance(ka, None):
-        cvm.error(f"unable to retrieve key alias: {ka}")
     if isinstance(contract, Contract):
         parties = contract.parties
-        parties += [key_alias]
+        parties += [ka]
         contract.parties : List[KeyAlias] = parties
-        contract.storage.put(contract.channel, contract)
+        # invite party to channel
+        cvm.add_owner(contract.channel, ka)
+        with PostTxArgs(contract.channel):
+            _contract_save(contract)
 
 @clientside
 def contract_sign(channel: ChannelName) -> None:
     contract = cvm.storage.get(channel, ContractStatic, Identifier(channel))
     if isinstance(contract, None):
         cvm.error(f"unable to retrieve contract on channel {channel}")
-    signature = Signature(contract_id = channel
-                         , party = cvm.tx.key_alias
-                         , created_at = cvm.tx.timestamp)
-    contract.signatures += signature
-    with PostTxArgs(channel):
-        _contract_sign(contract)
+    if isinstance(contract, Contract):
+        # Check that the signer is a party
+        signer = ""
+        for p in contract.parties:
+            if str(p) == str(cvm.tx.key_alias):
+                signer = p
+        if signer == "":
+            cvm.error(f"party not found in Contract: {cvm.tx.key_alias}")
+        signer_ka = KeyAlias(signer)
+        if isinstance(signer_ka, KeyAlias):
+            with PostTxArgs(channel):
+                _contract_sign(contract, signer_ka)
 
 @executable
-def _contract_sign(contract: Contract) -> None:
+def _contract_sign(contract: Contract, party: KeyAlias) -> None:
+    sig : Signature = Signature(contract_channel = contract.channel
+                               , party = party
+                               , created_at = 0)
+    sigs : List[Signature] = []
+    sigs = contract.signatures
+    sigs += sig
+    contract.signatures = sigs
     cvm.storage.put(contract.channel, contract)
